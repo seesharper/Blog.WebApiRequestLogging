@@ -4,20 +4,20 @@
     using System.Threading;
     using System.Threading.Tasks;
     using Microsoft.Owin;
-    public class RequestInfoMiddleware : OwinMiddleware
+    public class RequestContextMiddleware : OwinMiddleware
     {
-        private static readonly AsyncLocal<RequestInfo> RequestInfo = new AsyncLocal<RequestInfo>();
+        private static readonly AsyncLocal<RequestContext> RequestContextStorage = new AsyncLocal<RequestContext>();
 
-        public RequestInfoMiddleware(OwinMiddleware next) : base(next)
+        public RequestContextMiddleware(OwinMiddleware next) : base(next)
         {
         }
 
         public override async Task Invoke(IOwinContext context)
         {
-            RequestInfo.Value = new RequestInfo(Guid.NewGuid().ToString());
+            RequestContextStorage.Value = new RequestContext(Guid.NewGuid().ToString());
             await Next.Invoke(context);
         }
 
-        public static RequestInfo CurrentRequest => RequestInfo.Value;
+        public static RequestContext CurrentRequest => RequestContextStorage.Value;
     }
 }

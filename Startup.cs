@@ -17,20 +17,21 @@ namespace WebApiRequestLogging
         {
             var configuration = new HttpConfiguration();
             ConfigureHttpRoutes(configuration);
+            ConfigureMediaFormatter(configuration);
+
+            var container = new ServiceContainer();
+            container.RegisterFrom<WebApiCompositionRoot>();            
+            container.EnableWebApi(configuration);           
+
+            app.Use<RequestContextMiddleware>();
+            app.Use<RequestLoggingMiddleware>(container.GetInstance<Type, ILog>(typeof (RequestLogDecorator)));                              
+            app.UseWebApi(configuration);
+        }
+
+        private static void ConfigureMediaFormatter(HttpConfiguration configuration)
+        {
             configuration.Formatters.Clear();
             configuration.Formatters.Add(new JsonMediaTypeFormatter());
-            var container = new ServiceContainer();
-            container.RegisterFrom<CompositionRoot>();
-            container.RegisterApiControllers();
-            container.EnableWebApi(configuration);
-
-            container.Register<Func<RequestInfo>>(factory => (() => RequestInfoMiddleware.CurrentRequest), new PerContainerLifetime());
-            container.Decorate<ILog, RequestLogDecorator>();
-            app.Use<RequestInfoMiddleware>();
-            app.Use<RequestLoggingMiddleware>(container.GetInstance<Type, ILog>(typeof (RequestLogDecorator)));
-                  
-            
-            app.UseWebApi(configuration);
         }
 
         private static void ConfigureHttpRoutes(HttpConfiguration config)

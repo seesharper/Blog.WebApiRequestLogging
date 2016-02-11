@@ -1,8 +1,8 @@
 ﻿namespace WebApiRequestLogging
 {
-    public class RequestInfo
+    public class RequestContext
     {
-        public RequestInfo(string id)
+        public RequestContext(string id)
         {
             Id = id;
         }
