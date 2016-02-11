@@ -121,7 +121,7 @@ public class WebApiCompositionRoot : ICompositionRoot
 }
 ```
 
-The **WebApiCompositionRoot** registers core services in addition to **Web Api** related services which in this case means the controllers. 
+The **WebApiCompositionRoot** registers core services in addition services related to **Web Api** which in this case means the controllers. 
 
 
 ## Controllers
