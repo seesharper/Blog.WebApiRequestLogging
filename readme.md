@@ -383,6 +383,8 @@ Running the application and hitting the service should now yield the following o
 2016-02-11 20:40:31.205 [INFO] 6 WebApiRequestLogging.RequestLogDecorator: Request id: 91444099-72ad-488f-99d6-ab201f20531e Request /api/ping took 463 ms
 ```
 
+As we can see that even if we started and ended the request on two different threads, we still have the same request identifier.
+
 Happy logging!!
 
 
