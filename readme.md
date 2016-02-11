@@ -1,14 +1,14 @@
 # Web Api Request Logging
 
-This post is going to show how to use LightInject to enable logging in a Web Api application. We are going to look how to preserve contextual information associated with the incoming request so that this information can be used for logging purposes. All this goodness is going to end up in a simple console application that shows how all the pieces fit together.
+This post is going to show how to use **LightInject** to enable logging in a Web Api application. We are going to look how to preserve contextual information associated with the incoming request so that this information can be used for logging purposes. All this goodness is going to end up in a simple console application that shows how all the pieces fit together.
 
 
 
 ## Logging 
 
-Since logging is a cross cutting concern and is to be found scatted all around in our application, it makes sense to create an abstraction so that we don't create a direct dependency on a particular logging framework. This abstraction is something that we should own rather than relying on third part abstraction such as Common Logging. 
+Since logging is a cross cutting concern and is to be found scatted all around in our application, it makes sense to create an abstraction so that we don't create a direct dependency on a particular logging framework. This abstraction is something that we should own rather than relying on third part abstraction such as Common Logging. Believe me, that is going to cause us nothing but pain as we would have to deal with different versions of a third party abstraction. Own you own abstraction!
 
-So we start of with a simple interface that is going to be used for logging.
+We start of with a simple interface that is going to be used for logging.
 
 ```
 public interface ILog
@@ -58,82 +58,7 @@ public class Log : ILog
 
 The **Log** class is not tied to a specific logging framework and it just takes a set of action delegates that represents the three logging levels supported by our abstraction.
 
-This simple application has just one controller named **PingController** that is simply going to return the text "pong".
-
-```
-public class PingController : ApiController
-{
-    private readonly ILog log;
-
-    public PingController(ILog log)
-    {
-        this.log = log;
-    }
-
-    public async Task<IHttpActionResult> Get()
-    {
-        log.Info("Ping start");        
-        var result =  Ok("Pong");
-        log.Info("Ping end");
-        return result;
-    }
-}
-```
-
-As we can see we are injecting ILog into the controller and this is where LightInject comes into play.
-
-## Enabling dependency injection 
-
-First step is to install the **LightInject.WebApi** package. This package integrates **LightInject** with Web Api and makes it very simple to do dependency injection with Web Api controllers.
-
-The startup class looks like this
-
-```
-public class Startup
-{
-    public void Configuration(IAppBuilder app)
-    {
-        var configuration = new HttpConfiguration();
-        ConfigureHttpRoutes(configuration);
-        configuration.Formatters.Clear();
-        configuration.Formatters.Add(new JsonMediaTypeFormatter());
-        var container = new ServiceContainer();
-        container.RegisterFrom<CompositionRoot>();
-        container.RegisterApiControllers();
-        container.EnableWebApi(configuration);
-        app.UseWebApi(configuration);
-    }
-
-    private static void ConfigureHttpRoutes(HttpConfiguration config)
-    {
-        config.Routes.MapHttpRoute(
-            name: "API Default",
-            routeTemplate: "api/{controller}/{id}",
-            defaults: new { id = RouteParameter.Optional });
-    }
-}
-```
-
-In addition to this we have the composition root where we register services with the container. 
-
-```
-public class CompositionRoot : ICompositionRoot
-{
-    public void Compose(IServiceRegistry serviceRegistry)
-    {            
-        serviceRegistry.Register<ILogFactory, Log4NetLogFactory>(new PerContainerLifetime());
-        serviceRegistry.Register<Type, ILog>((factory, type) => factory.GetInstance<ILogFactory>().GetLogger(type));
-        serviceRegistry.RegisterConstructorDependency(
-            (factory, info) => factory.GetInstance<Type, ILog>(info.Member.DeclaringType));            
-    }
-}
-```
-
-The first service that we register is the **ILogFactory** that is responsible for creating an ILog instance based on a given type.
-
-> It is common to create a logger that is associated with the type where the logger is used.
-
-This interface looks like this:
+To help us create a **Log** instance, we have this nice little interface.
 
 ```
 public interface ILogFactory
@@ -160,14 +85,108 @@ public class Log4NetLogFactory : ILogFactory
 }
 ``` 
 
-Getting back to the **CompositionRoot** class we still have one line of code that might need some further explanation.
+> Note: This is the ONLY place where we actually reference Log4Net.
+
+## Composition root
+
+This application has two composition roots (**ICompositionRoot**), one that registers the core services (**CompositionRoot** )and one that registers services related to Web Api (**WebApiCompositionRoot**). 
+
 ```
-serviceRegistry.RegisterConstructorDependency((factory, info) => factory.GetInstance<ILogFactory>().GetLogger(info.Member.DeclaringType));
+public class CompositionRoot : ICompositionRoot
+{
+    public void Compose(IServiceRegistry serviceRegistry)
+    {            
+        serviceRegistry.Register<ILogFactory, Log4NetLogFactory>(new PerContainerLifetime());
+        serviceRegistry.Register<Type, ILog>((factory, type) => factory.GetInstance<ILogFactory>().GetLogger(type));
+        serviceRegistry.RegisterConstructorDependency(
+            (factory, info) => factory.GetInstance<Type, ILog>(info.Member.DeclaringType));            
+    }
+}
 ```
 
-This tells the container that whenever it sees an **ILog** constructor dependency, it should execute the given factory delegate passing the ParameterInfo into the delegate. This again makes it possible for us to create an **ILog** based on the actual class that uses the **ILog** instance.  
+The first service that we register is the **ILogFactory** that is responsible for creating an ILog instance based on a given type.
+
+Next, we register the **ILog** service with a factory delegate that calls into the already registered **ILogFactory** service
+
+Finally we tell the container using the **RegisterConstructorDependency** method that whenever it sees an **ILog** constructor dependency, it should provide an **ILog** instance based on the actual class that uses it. 
  
-That is pretty much it, press F5 run run the app and enter the following url in your favorite browser.
+```
+public class WebApiCompositionRoot : ICompositionRoot
+{
+    public void Compose(IServiceRegistry serviceRegistry)
+    {
+        serviceRegistry.RegisterFrom<CompositionRoot>();
+        serviceRegistry.RegisterApiControllers();
+    }
+}
+```
+
+The **WebApiCompositionRoot** registers core services in addition to Web Api related services which in this case means the controllers. 
+
+
+## Controllers
+
+
+This simple application has just one controller named **PingController** that is simply going to return the text "pong".
+
+```
+public class PingController : ApiController
+{
+    private readonly ILog log;
+
+    public PingController(ILog log)
+    {
+        this.log = log;
+    }
+
+    public async Task<IHttpActionResult> Get()
+    {
+        log.Info("Ping start");        
+        var result =  Ok("Pong");
+        log.Info("Ping end");
+        return result;
+    }
+}
+```
+
+As we can see we are injecting an **ILog** instance into the controller.
+
+The **Startup** class for this application looks like this
+
+
+```
+public class Startup
+{
+    public void Configuration(IAppBuilder app)
+    {
+        var configuration = new HttpConfiguration();
+        ConfigureHttpRoutes(configuration);
+        ConfigureMediaFormatter(configuration);
+
+        var container = new ServiceContainer();
+        container.RegisterFrom<WebApiCompositionRoot>();            
+        container.EnableWebApi(configuration);           
+                
+        app.UseWebApi(configuration);
+    }
+
+    private static void ConfigureMediaFormatter(HttpConfiguration configuration)
+    {
+        configuration.Formatters.Clear();
+        configuration.Formatters.Add(new JsonMediaTypeFormatter());
+    }
+
+    private static void ConfigureHttpRoutes(HttpConfiguration config)
+    {
+        config.Routes.MapHttpRoute(
+            name: "API Default",
+            routeTemplate: "api/{controller}/{id}",
+            defaults: new { id = RouteParameter.Optional });
+    }
+}
+```
+ 
+We can see all this in action just by running the application and hitting the service.
 
 ```
 http://localhost:8080/api/ping
@@ -176,14 +195,20 @@ http://localhost:8080/api/ping
 That should yield the following output in the console
 
 ```
-2016-02-11 09:14:28,489 [INFO] 13 WebApiRequestLogging.PingController: Ping start
-2016-02-11 09:14:28,603 [INFO] 6 WebApiRequestLogging.PingController: Ping end
+2016-02-11 09:14:28.489 [INFO] 13 WebApiRequestLogging.PingController: Ping start
+2016-02-11 09:14:28.603 [INFO] 6 WebApiRequestLogging.PingController: Ping end
 ```
+
+The Log4Net conversion pattern is like this (app.config)
+
+```
+<conversionPattern value="%date{yyyy-MM-dd HH:mm:ss.fff} [%level] %thread %logger: %message%newline" />
+```
+
 
 ## Request logging
 
-Next task is to enable some sort of logging of each web request and also add some contextual information such as the request url and a token that makes it possible to associate all log entries with a particular request.
-
+Sometimes it might be useful to log each request and maybe also the duration of the request.
 We start off with a simple class (Owin middleware) that logs the duration of the request.
 
 ```
@@ -199,7 +224,7 @@ public class RequestLoggingMiddleware : OwinMiddleware
 
     public override async Task Invoke(IOwinContext context)
     {            
-        await Measure(context);            
+        await Measure(context).ConfigureAwait(false);;            
     }
 
     private async Task Measure(IOwinContext context)
@@ -212,16 +237,19 @@ public class RequestLoggingMiddleware : OwinMiddleware
 }
 ```
 
-In addition to this we need to add this new middleware to the Owin pipeline by adding this line to the **CompositionRoot** class.
+In addition to this we need to add this new middleware to the Owin pipeline by adding this line to the **Startup** class.
 
 ```
-app.Use<RequestLoggingMiddleware>(container.GetInstance<ILogFactory>().GetLogger(typeof(RequestLoggingMiddleware)));
+app.Use<RequestLoggingMiddleware>(container.GetInstance<Type, ILog>(typeof (RequestLogDecorator)));
 ``` 
+
+> Note: The reason for using an **OwinMiddleware** instead of a **DelegatingHandler** is that the **OwinMiddleware** is not tied to **Web Api** in any way and can also be used in other frameworks that build upon the **Owin** stack.
+
 
 Console output should now be
 
 ```
-2016-02-11 13:07:48,466 [INFO] 11 WebApiRequestLogging.RequestLoggingMiddleware: Request /api/ping took 4 ms
+2016-02-11 13:07:48.466 [INFO] 11 WebApiRequestLogging.RequestLoggingMiddleware: Request /api/ping took 4 ms
 ```
 
 ## Request Context
@@ -230,7 +258,7 @@ In some situations it is useful to be able to associate all log entries with the
 
 We could make the **IOwinContext** available in the container so that it could be injected into any class that requires information about the current request. This would however mean that these classes would have to know about the **IOwinContext** which might not be the best solution. 
 
-Lets start off simple by creating a class to hold the request identifier.
+Let's start off simple by creating a class to hold the request identifier.
 
 ```
 public class RequestContext
@@ -275,9 +303,63 @@ Then we need to add the  **RequestContextMiddleware** to the Owin pipeline.
  app.Use<RequestContextMiddleware>();
 ```
 
+We now have way to access the current **RequestContext** through the **CurrentRequest** property. Sweet.
+
+The only thing missing now is to register a function delegate that represent getting the current **RequestContext**.
+
+```
+serviceRegistry.Register<Func<RequestContext>>(factory => (() => RequestContextMiddleware.CurrentRequest), new PerContainerLifetime());
+```
+
+The reason for injection a function delegate rather than just the **RequestContext** is that it might be used in services such as singletons that outlives the scope of a web request. By injecting the delegate that in turn gives us the **RequestContext**, we can be sure that it is valid.
+
+## Decorators
+
+The requirement here is that if we are logging outside the context of a web request, such as in a unit test, we should just log without the request identifier, but if we log inside a web request (production or integration tests), we should add the request identifier to the message being logged. This is a perfect example of where we can apply the **Decorator Pattern**. This allows us to add new functionality to a service without touching the original implementation. Did I hear "open-closed principle", anyone?
+
+```
+public class RequestLogDecorator : ILog
+{
+    private readonly ILog log;
+    private readonly Func<RequestContext> getRequestInfo;
+
+    public RequestLogDecorator(ILog log, Func<RequestContext> getRequestInfo)
+    {
+        this.log = log;
+        this.getRequestInfo = getRequestInfo;
+    }
+
+    public void Info(string message)
+    {
+        log.Info($"Request id: {getRequestContext().Id} {message}");
+    }
+
+    public void Debug(string message)
+    {
+        log.Debug($"Request id: {getRequestContext().Id} {message}");
+    }
+
+    public void Error(string message, Exception exception = null)
+    {
+        log.Error($"Request id: {getRequestContext().Id} {message}", exception);
+    }
+}
+```
+
+The decorator simply wraps the original **ILog** instance and applies the request identifier now returned from the **getRequestContext** delegate.
+
+> Note: If you are new to the decorator pattern, you can think of it as a Russian Doll where inside there is an exact identical doll wrapped by an outer doll.
+
+Decorators are first-class citizens in LightInject and applying a decorator is just a one-liner in the **WepApiCompositionRoot** class.
+
+```
+serviceRegistry.Decorate<ILog, RequestLogDecorator>();
+```
+
+Since we only apply the decorator in the **WepApiCompositionRoot** class it will only be used in the context of a web request.
 
 
-> Written with [StackEdit](https://stackedit.io/).
+
 
 
 
