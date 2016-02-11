@@ -23,7 +23,13 @@ namespace WebApiRequestLogging
             container.RegisterFrom<CompositionRoot>();
             container.RegisterApiControllers();
             container.EnableWebApi(configuration);
-            app.Use<RequestLoggingMiddleware>(container.GetInstance<ILogFactory>().GetLogger(typeof(RequestLoggingMiddleware)));
+
+            container.Register<Func<RequestInfo>>(factory => (() => RequestInfoMiddleware.CurrentRequest), new PerContainerLifetime());
+            container.Decorate<ILog, RequestLogDecorator>();
+            app.Use<RequestInfoMiddleware>();
+            app.Use<RequestLoggingMiddleware>(container.GetInstance<Type, ILog>(typeof (RequestLogDecorator)));
+                  
+            
             app.UseWebApi(configuration);
         }
 

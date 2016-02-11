@@ -99,6 +99,9 @@
     <Compile Include="PingController.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="RequestInfo.cs" />
+    <Compile Include="RequestInfoMiddleware.cs" />
+    <Compile Include="RequestLogDecorator.cs" />
     <Compile Include="RequestLoggingMiddleware.cs" />
     <Compile Include="Startup.cs" />
     <Compile Include="WebApplication.cs" />
