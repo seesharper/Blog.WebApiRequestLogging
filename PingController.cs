@@ -23,7 +23,7 @@
 
             // We are probably on another thread here
             var result =  Ok("Pong");
-            log.Info("Ping start");
+            log.Info("Ping end");
             return result;
         }
     }

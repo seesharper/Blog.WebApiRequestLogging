@@ -23,6 +23,7 @@ namespace WebApiRequestLogging
             container.RegisterFrom<CompositionRoot>();
             container.RegisterApiControllers();
             container.EnableWebApi(configuration);
+            app.Use<RequestLoggingMiddleware>(container.GetInstance<ILogFactory>().GetLogger(typeof(RequestLoggingMiddleware)));
             app.UseWebApi(configuration);
         }
 

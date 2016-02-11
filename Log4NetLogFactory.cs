@@ -8,7 +8,7 @@
     {
         public Log4NetLogFactory()
         {
-            XmlConfigurator.Configure();
+            XmlConfigurator.Configure();           
         }
 
         public ILog GetLogger(Type type)
